@@ -125,7 +125,6 @@ class Autoencoder(nn.Module):
         image = transform(image)
         image = image.unsqueeze(0)
         image = image.to(self.device)
-        print(image.size())
         return self.encode_forward(image)
 
     @classmethod

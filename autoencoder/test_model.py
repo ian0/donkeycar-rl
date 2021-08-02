@@ -1,28 +1,16 @@
-import matplotlib.pyplot as plt
-import torch
-import torch.utils.data
-from torch import nn, optim
-from torchvision.utils import make_grid
-from torchvision.utils import save_image
-from torchvision.transforms.functional import to_pil_image
-import torchvision.transforms as transforms
-from tqdm import tqdm
-from torch.utils.tensorboard import SummaryWriter
-import numpy as np
 import argparse
 import os
-import random
-import time
-import cv2
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch.utils.data
+import torchvision.transforms as transforms
 from PIL import Image
-from matplotlib import cm
+from torchvision.utils import save_image
 
 plt.style.use('ggplot')
 
-from models.autoencoder1 import Autoencoder
-from dataloader.dataloader import DataLoader
-from torch.nn import functional as F
-from configs.config import ROI, INPUT_DIM
+from models.autoencoder import Autoencoder
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
