@@ -104,7 +104,7 @@ def train(model, dataloader, dataset_size, device):
         loss.backward()
         train_loss += loss.item()
         model.optimizer.step()
-    train_loss = running_loss / counter
+    #train_loss = running_loss / counter
     return train_loss
 
 
@@ -184,6 +184,11 @@ def save_single_reconstructed_images(recon_images, epoch):
     save_image(recon_images.cpu(), f"training-images/single{epoch}.jpg")
 
 
+def pull_image():
+    image_idx = np.random.randint(n_samples)
+    image = Image.open(images[image_idx])
+    return image
+
 
 def pull_and_convert_image():
     image_idx = np.random.randint(n_samples)
@@ -208,7 +213,7 @@ def pull_and_convert_image():
 
 # pull_and_convert_image()
 
-model = Autoencoder(z_size=args.z_size, learning_rate=args.learning_rate).to(device)
+model = Autoencoder(z_size=args.z_size, c_hid=32, num_image_channels=3, learning_rate=args.learning_rate).to(device)
 # model = Autoencoder(image_channels=3,
 #                     base_channel_size=32,
 #                     latent_dim=32,
@@ -221,7 +226,7 @@ writer = SummaryWriter(log_dir='runs')
 
 # set the learning parameters
 lr = 0.001
-epochs = 100
+epochs = 15
 batch_size = 8
 best_loss = np.inf
 ae_id = int(time.time())
@@ -275,14 +280,22 @@ for epoch in range(epochs):
     ##################################
     ## remove this
 
-    irweazle = pull_and_convert_image()
-    irweazle = irweazle.to(device)
-    encoded_image = model.encode_forward(irweazle)
+    irweazle = pull_image()
+    encoded_image = model.encode_raw_image(irweazle)
     something = model.decode_forward(encoded_image)
-    #something = model.forward(some_image)
     something = something.to(device)
     save_single_reconstructed_images(something, epoch)
     print('something')
+
+
+    # irweazle = pull_and_convert_image()
+    # irweazle = irweazle.to(device)
+    # encoded_image = model.encode_forward(irweazle)
+    # something = model.decode_forward(encoded_image)
+    # #something = model.forward(some_image)
+    # something = something.to(device)
+    # save_single_reconstructed_images(something, epoch)
+    # print('something')
 
 
     # ##### this bit is working
@@ -341,12 +354,12 @@ for epoch in range(epochs):
 
 writer.flush()
 writer.close()
-torch.save(model.state_dict(), 'cnn_vae-32-dict.pt')
-torch.save(model, 'cnn_vae-32.pt')
-data = {
-    "z_size": model.z_size,
-    "learning_rate": model.learning_rate,
-    "input_dimension": model.input_dimension
-}
-
-torch.save({"state_dict": model.state_dict(), "data": data}, save_path)
+# torch.save(model.state_dict(), 'cnn_vae-32-dict.pt')
+# torch.save(model, 'cnn_vae-32.pt')
+# data = {
+#     "z_size": model.z_size,
+#     "learning_rate": model.learning_rate,
+#     "input_dimension": model.input_dimension
+# }
+#
+# torch.save({"state_dict": model.state_dict(), "data": data}, save_path)
