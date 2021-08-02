@@ -209,12 +209,19 @@ def pull_and_convert_image():
 # pull_and_convert_image()
 
 model = Autoencoder(z_size=args.z_size, learning_rate=args.learning_rate).to(device)
+# model = Autoencoder(image_channels=3,
+#                     base_channel_size=32,
+#                     latent_dim=32,
+#                     flatten_size=6144,
+#                     learning_rate=0.0001).to(device)
+print(model)
+
 dataloader = DataLoader("images", 32)
 writer = SummaryWriter(log_dir='runs')
 
 # set the learning parameters
 lr = 0.001
-epochs = 50
+epochs = 100
 batch_size = 8
 best_loss = np.inf
 ae_id = int(time.time())
@@ -339,8 +346,7 @@ torch.save(model, 'cnn_vae-32.pt')
 data = {
     "z_size": model.z_size,
     "learning_rate": model.learning_rate,
-    "input_dimension": model.input_dimension,
-    "normalization_mode": model.normalization_mode,
+    "input_dimension": model.input_dimension
 }
 
 torch.save({"state_dict": model.state_dict(), "data": data}, save_path)

@@ -23,75 +23,55 @@ class Autoencoder(nn.Module):
     :param normalization_mode: (str)
     """
 
-    def __init__(self, z_size, input_dimension=INPUT_DIM, learning_rate=0.0001, normalization_mode="rl"):
+    def __init__(self, z_size, input_dimension=INPUT_DIM, learning_rate=0.0001, flatten_size=6144):
         super(Autoencoder, self).__init__()
         # AE input and output shapes
         self.z_size = z_size
         self.input_dimension = input_dimension
         self.learning_rate = learning_rate
-
-        # Training params
-        self.normalization_mode = normalization_mode
+        self.flatten_size = flatten_size
 
         self.device = th.device("cuda" if th.cuda.is_available() else "cpu")
         self.encoder = None
         self.decoder = None
         self.shape_before_flatten = None
+        self.c_hid = 32
+        self.image_channels = 3
 
         # Re-order
         h, w, c = input_dimension
         self._build((c, h, w))
         self.optimizer = th.optim.Adam(self.parameters(), lr=self.learning_rate)
 
-    def encode_from_raw_image(self, raw_image):
-        """
-        Crop and encode a BGR image.
-        It returns the corresponding latent vector.
 
-        :param raw_image: (np.ndarray) BGR image
-        :return: (np.ndarray)
-        """
-        return self.encode(preprocess_image(raw_image, convert_to_rgb=False, normalize=False))
 
-    def encode(self, observation):
-        """
-        Normalize and encode a cropped image.
-        :param observation: (np.ndarray) Cropped image
-        :return: (np.ndarray) corresponding latent vector
-        """
-        assert observation.shape == self.input_dimension, "{} != {}".format(observation.shape, self.input_dimension)
-        # Normalize
-        observation = preprocess_input(observation.astype(np.float32), mode=self.normalization_mode)[None]
-        with th.no_grad():
-            observation = th.as_tensor(observation).to(self.device)
-            return self.encode_forward(observation).cpu().numpy()
 
-    def decode(self, arr):
-        """
-        :param arr: (np.ndarray) latent vector
-        :return: (np.ndarray) BGR image
-        """
-        assert arr.shape == (1, self.z_size), "{} != {}".format(arr.shape, (1, self.z_size))
-        # Decode
-        with th.no_grad():
-            arr = th.as_tensor(arr).float().to(self.device)
-            arr = self.decode_forward(arr).cpu().numpy()
-        # Denormalize
-        arr = denormalize(arr, mode=self.normalization_mode)
-        return arr
 
     def _build(self, input_shape):
         # n_channels, kernel_size, strides, activation, padding=0
+        # self.encoder = nn.Sequential(
+        #     nn.Conv2d(input_shape[0], 32, kernel_size=4, stride=2),
+        #     nn.ReLU(),
+        #     nn.Conv2d(32, 64, kernel_size=4, stride=2),
+        #     nn.ReLU(),
+        #     nn.Conv2d(64, 128, kernel_size=4, stride=2),
+        #     nn.ReLU(),
+        #     nn.Conv2d(128, 256, kernel_size=4, stride=2),
+        #     nn.ReLU(),
+        #     #Print()
+        # )
         self.encoder = nn.Sequential(
-            nn.Conv2d(input_shape[0], 32, kernel_size=4, stride=2),
+            nn.Conv2d(self.image_channels, self.c_hid, kernel_size=4, stride=2),  # 32x32 => 16x16
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.Conv2d(self.c_hid, 2 * self.c_hid, kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=4, stride=2),
+            nn.Conv2d(2 * self.c_hid, 4 * self.c_hid, kernel_size=4, stride=2),  # 16x16 => 8x8
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=4, stride=2),
+            nn.Conv2d(4 * self.c_hid, 8 * self.c_hid, kernel_size=4, stride=2),
             nn.ReLU(),
-            #Print()
+            nn.Flatten(),  # Image grid to single feature vector
+            # nn.Linear(flatten_size, latent_dim),
+            # Print()
         )
 
         # Compute the shape doing a forward pass
@@ -100,35 +80,67 @@ class Autoencoder(nn.Module):
         self.shape_before_flatten = self.encoder(th.ones((1,) + input_shape)).shape[1:]
         flatten_size = int(np.prod(self.shape_before_flatten))
 
-        self.encode_linear = nn.Linear(flatten_size, self.z_size)
-        self.decode_linear = nn.Linear(self.z_size, flatten_size)
+        self.encode_linear = nn.Linear(self.flatten_size, self.z_size)
+        self.decode_linear = nn.Linear(self.z_size, self.flatten_size)
 
+        # self.decoder = nn.Sequential(
+        #     nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2),
+        #     nn.ReLU(),
+        #     nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2),
+        #     nn.ReLU(),
+        #     nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2),
+        #     nn.ReLU(),
+        #     nn.ConvTranspose2d(32, input_shape[0], kernel_size=4, stride=2),
+        #     nn.Sigmoid(),
+        #     #Print()
+        # )
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2),
+            nn.ConvTranspose2d(8 * self.c_hid, 4 * self.c_hid, kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2),
+            nn.ConvTranspose2d(4 * self.c_hid, 2 * self.c_hid, kernel_size=4, stride=2),
             nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2),
+            ## error is kernel size is 4 -- why?
+            nn.ConvTranspose2d(2 * self.c_hid, self.c_hid, kernel_size=5, stride=2),
             nn.ReLU(),
-            nn.ConvTranspose2d(32, input_shape[0], kernel_size=4, stride=2),
+            nn.ConvTranspose2d(self.c_hid, self.image_channels, kernel_size=4, stride=2),
             nn.Sigmoid(),
+            #Print()
         )
+        # self.decoder = nn.Sequential(
+        #     nn.Conv2d(8 * self.c_hid, 4 * self.c_hid, kernel_size=4, stride=2),
+        #     nn.ReLU(),
+        #     nn.Conv2d(4 * self.c_hid, 2 * self.c_hid, kernel_size=4, stride=2),
+        #     nn.ReLU(),
+        #     nn.Conv2d(2 * self.c_hid, self.c_hid, kernel_size=5, stride=2),
+        #     nn.ReLU(),
+        #     nn.ConvTranspose2d(self.c_hid, input_shape[0], kernel_size=4, stride=2),
+        #     nn.Sigmoid()  # Scaled between 0 and 1
+        # )
+
 
     def encode_forward(self, input_tensor):
         """
         :param input_tensor: (th.Tensor)
         :return: (th.Tensor)
         """
-        h = self.encoder(input_tensor).reshape(input_tensor.size(0), -1)
-        return self.encode_linear(h)
+        # h = self.encoder(input_tensor).reshape(input_tensor.size(0), -1)
+        # return self.encode_linear(h)
+        z = self.encoder(input_tensor)#.view(input_tensor.size(0), -1)
+        z = self.encode_linear(z)
+        return z
+
 
     def decode_forward(self, z):
         """
         :param z: (th.Tensor)
         :return: (th.Tensor)
         """
-        h = self.decode_linear(z).reshape((z.size(0),) + self.shape_before_flatten)
-        return self.decoder(h)
+        # h = self.decode_linear(z).reshape((z.size(0),) + self.shape_before_flatten)
+        # return self.decoder(h)
+        z = self.decode_linear(z)
+        z = z.view(z.shape[0], 256, 3, 8)
+        z = self.decoder(z)
+        return z
 
     def forward(self, input_image):
         return self.decode_forward(self.encode_forward(input_image))
@@ -142,8 +154,7 @@ class Autoencoder(nn.Module):
         data = {
             "z_size": self.z_size,
             "learning_rate": self.learning_rate,
-            "input_dimension": self.input_dimension,
-            "normalization_mode": self.normalization_mode,
+            "input_dimension": self.input_dimension
         }
 
         th.save({"state_dict": self.state_dict(), "data": data}, save_path)
@@ -158,92 +169,7 @@ class Autoencoder(nn.Module):
         return model
 
 
-def preprocess_input(x, mode="rl"):
-    """
-    Normalize input.
 
-    :param x: (np.ndarray) (RGB image with values between [0, 255])
-    :param mode: (str) One of "image_net", "tf" or "rl".
-        - rl: divide by 255 only (rescale to [0, 1])
-        - tf: will scale pixels between -1 and 1,
-            sample-wise.
-    :return: (np.ndarray)
-    """
-    assert x.shape[-1] == 3, "Color channel must be at the end of the tensor {}".format(x.shape)
-    # RL mode: divide only by 255
-    x /= 255.0
-
-    if mode == "tf":
-        x -= 0.5
-        x *= 2.0
-    elif mode == "rl":
-        pass
-    else:
-        raise ValueError("Unknown mode for preprocessing")
-    # Reorder channels
-    # B x H x W x C -> B x C x H x W
-    # if len(x.shape) == 4:
-    #     x = np.transpose(x, (0, 2, 3, 1))
-    x = np.transpose(x, (2, 0, 1))
-
-    return x
-
-
-def denormalize(x, mode="rl"):
-    """
-    De normalize data (transform input to [0, 1])
-
-    :param x: (np.ndarray)
-    :param mode: (str) One of "tf" or "rl".
-    :return: (np.ndarray)
-    """
-
-    if mode == "tf":
-        x /= 2.0
-        x += 0.5
-    elif mode == "rl":
-        pass
-    else:
-        raise ValueError("Unknown mode for denormalize")
-
-    # Reorder channels
-    # B x C x H x W -> B x H x W x C
-    if len(x.shape) == 4:
-        x = np.transpose(x, (0, 2, 3, 1))
-    else:
-        x = np.transpose(x, (2, 0, 1))
-
-    # Clip to fix numeric imprecision (1e-09 = 0)
-    return (255 * np.clip(x, 0, 1)).astype(np.uint8)
-
-
-def preprocess_image(image, convert_to_rgb=False, normalize=True):
-    """
-    Crop, resize and normalize image.
-    Optionnally it also converts the image from BGR to RGB.
-
-    :param image: (np.ndarray) image (BGR or RGB)
-    :param convert_to_rgb: (bool) whether the conversion to rgb is needed or not
-    :param normalize: (bool) Whether to normalize or not
-    :return: (np.ndarray)
-    """
-    assert image.shape == RAW_IMAGE_SHAPE, "{} != {}".format(image.shape, RAW_IMAGE_SHAPE)
-    # Crop
-    # Region of interest
-    r = ROI
-    image = image[int(r[1]) : int(r[1] + r[3]), int(r[0]) : int(r[0] + r[2])]
-    im = image
-    # Hack: resize if needed, better to change conv2d  kernel size / padding
-    if ROI[2] != INPUT_DIM[1] or ROI[3] != INPUT_DIM[0]:
-        im = cv2.resize(im, (INPUT_DIM[1], INPUT_DIM[0]), interpolation=cv2.INTER_AREA)
-    # Convert BGR to RGB
-    if convert_to_rgb:
-        im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-    # Normalize
-    if normalize:
-        im = preprocess_input(im.astype(np.float32), mode="rl")
-
-    return im
 
 
 def load_ae(path=None, z_size=None, quantize=False):

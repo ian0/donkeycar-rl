@@ -19,7 +19,7 @@ from matplotlib import cm
 
 plt.style.use('ggplot')
 
-from models.autoencoder import Autoencoder
+from models.autoencoder1 import Autoencoder
 from dataloader.dataloader import DataLoader
 from torch.nn import functional as F
 from configs.config import ROI, INPUT_DIM
