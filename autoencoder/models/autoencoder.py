@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function
 import torch
 from torch import nn
 import torchvision.transforms as transforms
+import numpy as np
 
 
 class Print(nn.Module):
@@ -126,6 +127,24 @@ class Autoencoder(nn.Module):
         image = image.unsqueeze(0)
         image = image.to(self.device)
         return self.encode_forward(image)
+
+    def encode_ndarray(self, observation):
+        observation = np.transpose(observation, (2, 0, 1))
+        with torch.no_grad():
+            observation = torch.tensor(observation.copy(), dtype=torch.float)
+            #print(observation.shape)
+            transform = transforms.Compose(
+                [transforms.Resize((80, 160)), transforms.Normalize(0, 255)]
+            )
+            observation = transform(observation)
+            #print(observation.shape)
+
+            img_tensor = torch.unsqueeze(observation, 0)
+            #print(img_tensor.shape)
+            img_tensor = img_tensor.to(self.device)
+            return self.encode_forward(img_tensor)
+
+
 
     @classmethod
     def load(cls, load_path):

@@ -1,0 +1,40 @@
+donkey-generated-roads-v0:
+  batch_size: 32
+  ent_coef: auto_0.1
+  gamma: 0.9
+  gradient_steps: 2
+  learning_rate: 0.0003
+  tau: 0.001
+  policy_kwargs:
+    layers: [32, 32]
+  train_freq: 1
+donkey-generated-track-v0:
+  batch_size: 32
+  ent_coef: auto_0.1
+  gamma: 0.9
+  gradient_steps: 2
+  learning_rate: 0.0003
+  tau: 0.001
+  policy_kwargs:
+    layers: [32, 32]
+  train_freq: 1
+donkey-warehouse-v0:
+  batch_size: 32
+  ent_coef: auto_0.1
+  gamma: 0.9
+  gradient_steps: 2
+  learning_rate: 0.0003
+  tau: 0.001
+  policy_kwargs:
+    layers: [32, 32]
+  train_freq: 1
+donkey-avc-sparkfun-v0:
+  batch_size: 32
+  ent_coef: auto_0.1
+  gamma: 0.9
+  gradient_steps: 2
+  learning_rate: 0.0003
+  tau: 0.001
+  policy_kwargs:
+    layers: [32, 32]
+  train_freq: 1
