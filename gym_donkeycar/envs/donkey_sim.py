@@ -139,6 +139,12 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.lidar_num_sweep_levels = 1
         self.lidar_deg_ang_delta = 1
 
+        self.x_last = 0.0
+        self.y_last = 0.0
+        self.z_last = 0.0
+        self.distance = 0.0
+        self.first_iter = True
+
     def on_connect(self, client):
         logger.debug("socket connected")
         self.client = client
@@ -285,11 +291,19 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.pitch = 0.0
         self.yaw = 0.0
 
+        self.x_last = 0.0
+        self.y_last = 0.0
+        self.z_last = 0.0
+        self.distance = 0.0
+        self.first_iter = True
+
     def get_sensor_size(self):
         return self.camera_img_size
 
     def take_action(self, action):
         self.send_control(action[0], action[1])
+
+
 
     def observe(self):
         while self.last_obs is self.image_array:
@@ -299,6 +313,12 @@ class DonkeyUnitySimHandler(IMesgHandler):
         observation = self.image_array
         done = self.is_game_over()
         reward = self.calc_reward(done)
+
+        if not self.first_iter:
+            distance = (np.linalg.norm(self.x_last - self.x) + np.linalg.norm(self.y_last - self.y)
+                        + np.linalg.norm(self.z_last - self.z))
+            self.distance += distance
+
         # info = {'pos': (self.x, self.y, self.z), 'cte': self.cte,
         #        "speed": self.speed, "hit": self.hit}
         info = {
@@ -311,9 +331,14 @@ class DonkeyUnitySimHandler(IMesgHandler):
             "vel": (self.vel_x, self.vel_y, self.vel_z),
             "lidar": (self.lidar),
             "car": (self.roll, self.pitch, self.yaw),
+            "distance": self.distance
         }
 
-        logger.info(info)
+        logger.info(info.get("distance"))
+        self.x_last = self.x
+        self.y_last = self.y
+        self.z_last = self.z
+        self.first_iter = False
 
         # self.timer.on_frame()
 
@@ -350,7 +375,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
 
         if done:
             return -10 + 5 * (self.speed / 18.0)
-        throttle_reward = 0.6 * (self.speed / 18.0)
+        throttle_reward = 0.1 * (self.speed / 18.0)
         return 1 + throttle_reward - math.fabs(self.cte / 5.0)
 
     # ------ Socket interface ----------- #
@@ -433,14 +458,27 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.determine_episode_over = types.MethodType(ep_over_fn, self)
         logger.debug("custom ep_over fn set.")
 
+
+    def check_adjusted_cte(self):
+        if self.cte < 0:
+            if (math.fabs(self.cte)) < (self.max_cte - 2):
+                self.over = True
+        else:
+            if (math.fabs(self.cte)+3) > self.max_cte:
+                logger.debug(f"game over: cte {self.cte}")
+                self.over = True
+
+
     def determine_episode_over(self):
         # we have a few initial frames on start that are sometimes very large CTE when it's behind
         # the path just slightly. We ignore those.
+        #print(f'self.cte: {self.cte}, self.max_cte: {self.max_cte}')
         if math.fabs(self.cte) > 2 * self.max_cte:
             pass
+        #elif self.check_adjusted_cte():
         elif math.fabs(self.cte) > self.max_cte:
-            logger.debug(f"game over: cte {self.cte}")
-            self.over = True
+             logger.debug(f"game over: cte {self.cte}")
+             self.over = True
         elif self.hit != "none":
             logger.debug(f"game over: hit {self.hit}")
             self.over = True

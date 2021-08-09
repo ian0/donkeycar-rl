@@ -129,6 +129,11 @@ class Autoencoder(nn.Module):
         return self.encode_forward(image)
 
     def encode_ndarray(self, observation):
+        """
+        Encode the raw observation. It is a three channel ndarray of size 120 x 160
+        :param observation:
+        :return:
+        """
         observation = np.transpose(observation, (2, 0, 1))
         with torch.no_grad():
             observation = torch.tensor(observation.copy(), dtype=torch.float)

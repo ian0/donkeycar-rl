@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from loguru import logger
+import time
 
 env_list = [
     "donkey-warehouse-v0",
@@ -10,8 +11,11 @@ env_list = [
     "donkey-generated-track-v0",
 ]
 
+time = int(time.time())
+
 
 def common_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+
     """Common arguments for all files."""
     parser.add_argument(
         "--environment_id",
@@ -24,12 +28,13 @@ def common_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         "--ae_path",
         help="Path to VAE model (pkl)",
         type=str,
-        default="pretrained-models/autoencoder/vae-donkey-generated-roads-v0-32.pkl",
+        default="pretrained-models/autoencoder/ae-donkey-generated-roads-v0-32.pkl",
     )
     parser.add_argument(
         "--model_path",
         type=Path,
-        default="pretrained-models/policy/policy-donkey-generated-roads-v0-32.zip",
+        #default=f"pretrained-models/policy/policy-donkey-generated-roads-{time}-32.zip",
+        default=f"pretrained-models/policy/policy-donkey-generated-roads-1628086109-32.zip",
         help="Path to the policy model (zip file).",
     )
     parser.add_argument(

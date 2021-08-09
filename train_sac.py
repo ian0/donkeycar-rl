@@ -3,7 +3,7 @@ import argparse
 import gym
 #import tensorflow as tf
 from loguru import logger
-from stable_baselines3 import SAC
+from stable_baselines3 import HerReplayBuffer, SAC
 from stable_baselines3.sac import MlpPolicy
 import torch
 import yaml
@@ -13,6 +13,10 @@ from environment.utility import seed, load_ae_controller
 from environment.wrappers import make_wrappers
 from environment.command import common_args, parse_args
 import logging
+
+from callbacks import TensorboardCallback
+
+from stable_baselines3.common.envs import BitFlippingEnv
 
 #tf.logging.set_verbosity(tf.logging.DEBUG)
 
@@ -41,7 +45,10 @@ def main(args: dict):
             hyperparams = hyperparams_dict[args["environment_id"]]
             logger.debug(f"Policy hyperparameters: {hyperparams}")
 
+        test_callback = TensorboardCallback()
+
         policy = dict(activation_fn=torch.nn.ReLU, net_arch=[32, 32], use_sde=True)
+
 
         # model = SAC(env=env,
         #             policy=MlpPolicy,
@@ -74,8 +81,14 @@ def main(args: dict):
                     tau=0.02,
                     use_sde_at_warmup=True,
                     use_sde=True,
-                    sde_sample_freq=64
+                    sde_sample_freq=64,
                     )
+
+
+
+
+
+
 
 
         #     SAC(
@@ -91,7 +104,11 @@ def main(args: dict):
         seed(42, env)
 
         logger.info(f"Learning. CTRL+C to quit.")
-        model.learn(total_timesteps=30000, log_interval=1)
+        model.learn(total_timesteps=30000, log_interval=1, callback=test_callback)
+        #model.learn(total_timesteps=30000, log_interval=1)
+    except KeyboardInterrupt as e:
+        logging.info('Finished early')
+        pass
     finally:
         # logger.info(f'Trained for {env.get_total_steps()}')
         logger.info(f'Saving model to {args["model_path"]}, don\'t quit!')

@@ -18,7 +18,7 @@ def make_wrappers(env: gym.Env, vae) -> gym.Env:
     ----------
     env : gym.Env
         The original environment.
-    vae : 
+    vae :
         The vae instance
 
     Returns
@@ -29,7 +29,8 @@ def make_wrappers(env: gym.Env, vae) -> gym.Env:
     env = VAEWrapper(env, vae)
     env = DonkeyCarActionWrapper(env, max_throttle=0.15, max_steering_angle=0.5)
     env = RenderWrapper(env)
-    env = MaxTimeStepsSafetyValve(env, 2000)
+    #env = NoSteeringAtStartWrapper(env, 80)
+    env = MaxTimeStepsSafetyValve(env, 10000)
     return env
 
 
@@ -96,17 +97,26 @@ class DonkeyCarActionWrapper(gym.ActionWrapper):
 
 
 class NoSteeringAtStartWrapper(gym.ActionWrapper):
-    def __init__(self, env: gym.Env, n_steps=200):
+    def __init__(self, env: gym.Env, n_steps=80):
         super(NoSteeringAtStartWrapper, self).__init__(env)
         self.n_steps = n_steps
         self.counter = 0
 
+    # def reset(self, **kwargs):
+    #     #self.n_steps = 40
+    #     self.counter = 0
+    #     logger.debug("********************resetting counter*****************")
+    #     pass
+    #     #return self.env.reset(**kwargs)
+
+
     def action(self, action):
+        print(f'counter: {self.counter}, n_steps: {self.n_steps}')
         if self.counter < self.n_steps:
             action[ACTION_STEERING] = 0
             self.counter += 1
         elif self.counter == self.n_steps:
-            logger.debug("Enabling steering")
+            logger.debug("!!!!!!!!!!!!!!!!!!Enabling steering!!!!!!!!!!!!!!!!!")
             self.counter += 1
         return action
 
