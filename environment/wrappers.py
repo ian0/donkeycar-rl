@@ -1,9 +1,13 @@
+# history wrapper from https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/utils/wrappers.py
+
 import gym
 import numpy as np
 from loguru import logger
 from scipy.stats import norm
 from simple_pid import PID
 import cv2
+
+from gym_donkeycar.envs.donkey_env import DonkeyUnitySimContoller
 
 ACTION_STEERING = 0
 ACTION_THROTTLE = 1
@@ -29,8 +33,10 @@ def make_wrappers(env: gym.Env, vae) -> gym.Env:
     env = VAEWrapper(env, vae)
     env = DonkeyCarActionWrapper(env, max_throttle=0.15, max_steering_angle=0.5)
     env = RenderWrapper(env)
-    #env = NoSteeringAtStartWrapper(env, 80)
+    env = NoSteeringAtStartWrapper(env, 80)
     env = MaxTimeStepsSafetyValve(env, 10000)
+    env = HistoryWrapper(env, horizon=5)
+    env = BufferHistoryWrapper(env, 10)
     return env
 
 
@@ -109,14 +115,13 @@ class NoSteeringAtStartWrapper(gym.ActionWrapper):
     #     pass
     #     #return self.env.reset(**kwargs)
 
-
     def action(self, action):
-        print(f'counter: {self.counter}, n_steps: {self.n_steps}')
+        # print(f'counter: {self.counter}, n_steps: {self.n_steps}')
         if self.counter < self.n_steps:
             action[ACTION_STEERING] = 0
             self.counter += 1
         elif self.counter == self.n_steps:
-            logger.debug("!!!!!!!!!!!!!!!!!!Enabling steering!!!!!!!!!!!!!!!!!")
+            logger.debug("Enabling steering")
             self.counter += 1
         return action
 
@@ -204,3 +209,82 @@ class RenderWrapper(gym.Wrapper):
 
     def render(self, mode="rgb_array"):
         return self.env.raw_observation
+
+
+class BufferHistoryWrapper(gym.ObservationWrapper):
+    def __init__(self, env, n_steps, dtype=np.float32):
+        super(BufferHistoryWrapper, self).__init__(env)
+        self.dtype = dtype
+        old_space = env.observation_space
+        self.observation_space = gym.spaces.Box(
+            old_space.low.repeat(n_steps, axis=0),
+            old_space.high.repeat(n_steps, axis=0), dtype=dtype)
+
+    def reset(self):
+        self.buffer = np.zeros_like(
+            self.observation_space.low, dtype=self.dtype)
+        return self.observation(self.env.reset())
+
+    def observation(self, observation):
+        self.buffer[:-1] = self.buffer[1:]
+        self.buffer[-1] = observation
+        return self.buffer
+
+
+class HistoryWrapper(gym.Wrapper):
+    """
+    Stack past observations and actions to give an history to the agent.
+    :param env: (gym.Env)
+    :param horizon: (int) Number of steps to keep in the history.
+    """
+
+    def __init__(self, env: gym.Env, horizon: int = 5):
+        assert isinstance(env.observation_space, gym.spaces.Box)
+
+        wrapped_obs_space = env.observation_space
+        wrapped_action_space = env.action_space
+
+        # TODO: double check, it seems wrong when we have different low and highs
+        low_obs = np.repeat(wrapped_obs_space.low, horizon, axis=-1)
+        high_obs = np.repeat(wrapped_obs_space.high, horizon, axis=-1)
+
+        low_action = np.repeat(wrapped_action_space.low, horizon, axis=-1)
+        high_action = np.repeat(wrapped_action_space.high, horizon, axis=-1)
+
+        low = np.concatenate((low_obs, np.expand_dims(low_action, axis=0)), axis=1)
+        high = np.concatenate((high_obs, np.expand_dims(high_action, axis=0)), axis=1)
+
+        # Overwrite the observation space
+        env.observation_space = gym.spaces.Box(low=low, high=high, dtype=wrapped_obs_space.dtype)
+
+        super(HistoryWrapper, self).__init__(env)
+
+        self.horizon = horizon
+        self.low_action, self.high_action = low_action, high_action
+        self.low_obs, self.high_obs = low_obs, high_obs
+        self.low, self.high = low, high
+        self.obs_history = np.zeros(low_obs.shape, low_obs.dtype)
+        self.action_history = np.zeros(np.expand_dims(self.low_action, axis=0).shape, low_action.dtype)
+        #self.action_history = np.zeros(low_action.shape, low_action.dtype)
+
+    def _create_obs_from_history(self):
+        return np.concatenate((self.obs_history, self.action_history), axis=1)
+
+    def reset(self):
+        # Flush the history
+        self.obs_history[...] = 0
+        self.action_history[...] = 0
+        obs = self.env.reset()
+        self.obs_history[..., -obs.shape[-1]:] = obs
+        return self._create_obs_from_history()
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        last_ax_size = obs.shape[-1]
+
+        self.obs_history = np.roll(self.obs_history, shift=-last_ax_size, axis=-1)
+        self.obs_history[..., -obs.shape[-1]:] = obs
+
+        self.action_history = np.roll(self.action_history, shift=-action.shape[-1], axis=-1)
+        self.action_history[..., -action.shape[-1]:] = action
+        return self._create_obs_from_history(), reward, done, info

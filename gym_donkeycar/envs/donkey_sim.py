@@ -334,7 +334,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
             "distance": self.distance
         }
 
-        logger.info(info.get("distance"))
+        #logger.info(info.get("distance"))
         self.x_last = self.x
         self.y_last = self.y
         self.z_last = self.z
