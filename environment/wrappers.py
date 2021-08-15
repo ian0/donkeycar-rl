@@ -34,7 +34,7 @@ def make_wrappers(env: gym.Env, vae) -> gym.Env:
     env = DonkeyCarActionWrapper(env, max_throttle=0.15, max_steering_angle=0.5)
     env = RenderWrapper(env)
     env = NoSteeringAtStartWrapper(env, 80)
-    env = MaxTimeStepsSafetyValve(env, 10000)
+    # env = MaxTimeStepsSafetyValve(env, 10000)
     env = HistoryWrapper(env, horizon=5)
     env = BufferHistoryWrapper(env, 10)
     return env

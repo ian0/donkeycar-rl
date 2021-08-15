@@ -5,6 +5,7 @@ import gym
 from loguru import logger
 from stable_baselines3 import SAC
 #from models.custom_sac import SAC
+from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from stable_baselines3.sac import MlpPolicy
 import torch
 import yaml
@@ -14,12 +15,16 @@ from environment.utility import seed, load_ae_controller
 from environment.wrappers import make_wrappers
 from environment.command import common_args, parse_args
 import logging
+import time
 
 from callbacks import TensorboardCallback
 
 from stable_baselines3.common.evaluation import evaluate_policy
 
+
 #tf.logging.set_verbosity(tf.logging.DEBUG)
+
+
 
 
 def main(args: dict):
@@ -49,9 +54,17 @@ def main(args: dict):
         )
 
         test_callback = TensorboardCallback()
+        # Save a checkpoint every 1000 steps
+        id = int(time.time())
+        checkpoint_callback = CheckpointCallback(save_freq=1000, save_path="./logs/",
+                                                 name_prefix="donkey_model")
+        callback = CallbackList([checkpoint_callback, test_callback])
+
         seed(42, env)
 
         policy = dict(activation_fn=torch.nn.ReLU, net_arch=[64, 64], use_sde=True, log_std_init=-2)
+
+        logger.info('create model and start learning')
 
         model = SAC(MlpPolicy,
                     policy_kwargs=policy,
@@ -71,27 +84,20 @@ def main(args: dict):
                     use_sde=True,
                     sde_sample_freq=64,
                     ).learn(total_timesteps=int(30000), eval_freq=50, n_eval_episodes=5,
-                            eval_log_path="./logs/", callback=test_callback)
+                            eval_log_path="./logs/", callback=callback)
 
-        # model = SAC(MlpPolicy,
-        #             env=env,
-        #             verbose=1,
-        #             train_freq=(1, "episode"),
-        #             tensorboard_log=str(args["tensorboard_dir"])
-        #             ).learn(total_timesteps=int(2e5), eval_freq=1000, n_eval_episodes=5,
-        #                     eval_log_path="./logs/", callback=test_callback)
-
+        logger.info('save the model')
         # save the model
         model.save("sac_donkeycar")
 
-        # the saved model does not contain the replay buffer
-        loaded_model = SAC.load("sac_donkeycar")
-        print(f"The loaded_model has {loaded_model.replay_buffer.size()} transitions in its buffer")
-
+        logger.info('save the replay buffer')
         # now save the replay buffer too
         model.save_replay_buffer("sac_donkeycar_replay_buffer")
 
-        # load it into the loaded_model
+        logger.info('Load the model')
+        loaded_model = SAC.load("sac_donkeycar")
+
+        logger.info('load replay buffer into loaded model')
         loaded_model.load_replay_buffer("sac_donkeycar_replay_buffer")
 
         # now the loaded replay is not empty anymore
@@ -100,13 +106,14 @@ def main(args: dict):
         # Save the policy independently from the model
         # Note: if you don't save the complete model with `model.save()`
         # you cannot continue training afterward
+        logger.info('save the policy')
         policy = model.policy
         policy.save("sac_policy_donkeycar")
 
-        # Retrieve the environment
+        logger.info('Retrieve the environment')
         env = model.get_env()
 
-        # Evaluate the policy
+        logger.info('Evaluate the policy')
         mean_reward, std_reward = evaluate_policy(policy, env, n_eval_episodes=10, deterministic=True)
 
         print(f"mean_reward={mean_reward:.2f} +/- {std_reward}")

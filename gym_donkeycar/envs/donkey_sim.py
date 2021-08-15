@@ -20,10 +20,12 @@ from gym_donkeycar.core.sim_client import SimClient
 
 logger = logging.getLogger(__name__)
 
+from configs.config import REWARD_CRASH, CRASH_REWARD_WEIGHT, THROTTLE_REWARD_WEIGHT, MAX_THROTTLE, MIN_THROTTLE
+
 #from config import REWARD_CRASH, CRASH_REWARD_WEIGHT, THROTTLE_REWARD_WEIGHT
-REWARD_CRASH: -10
-CRASH_REWARD_WEIGHT: 5
-THROTTLE_REWARD_WEIGHT: 0.1
+# REWARD_CRASH: -10
+# CRASH_REWARD_WEIGHT: 5
+# THROTTLE_REWARD_WEIGHT: 0.1
 
 
 
@@ -94,6 +96,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.camera_img_size = conf["cam_resolution"]
         self.image_array = np.zeros(self.camera_img_size)
         self.last_obs = None
+        self.last_throttle = 0.0
         self.hit = "none"
         self.cte = 0.0
         self.x = 0.0
@@ -301,6 +304,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
         return self.camera_img_size
 
     def take_action(self, action):
+        self.last_throttle = action[1]
         self.send_control(action[0], action[1])
 
 
@@ -357,9 +361,9 @@ class DonkeyUnitySimHandler(IMesgHandler):
         logger.debug("custom reward fn set.")
 
     def calc_reward(self, done):
-        REWARD_CRASH: -10
-        CRASH_REWARD_WEIGHT: 5
-        THROTTLE_REWARD_WEIGHT: 0.1
+        # REWARD_CRASH: -10
+        # CRASH_REWARD_WEIGHT: 5
+        # THROTTLE_REWARD_WEIGHT: 0.1
 
         # if done:
         #     return -1.0
@@ -373,10 +377,19 @@ class DonkeyUnitySimHandler(IMesgHandler):
         # # going fast close to the center of lane yeilds best reward
         # return (1.0 - (math.fabs(self.cte) / self.max_cte)) * self.speed
 
+        # if done:
+        #     return -10 + 5 * (self.speed / 18.0)
+        # throttle_reward = 0.1 * (self.speed / 18.0)
+        # return 1 + throttle_reward - math.fabs(self.cte / 5.0)
+
         if done:
-            return -10 + 5 * (self.speed / 18.0)
-        throttle_reward = 0.1 * (self.speed / 18.0)
-        return 1 + throttle_reward - math.fabs(self.cte / 5.0)
+            # penalize the agent for getting off the road fast
+            norm_throttle = (self.last_throttle - MIN_THROTTLE) / (MAX_THROTTLE - MIN_THROTTLE)
+            #return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
+            return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
+        # 1 per timesteps + throttle
+        throttle_reward = THROTTLE_REWARD_WEIGHT * (self.last_throttle / MAX_THROTTLE)
+        return 1 + ((1.0 - (math.fabs(self.cte) / self.max_cte)) * throttle_reward)
 
     # ------ Socket interface ----------- #
 
