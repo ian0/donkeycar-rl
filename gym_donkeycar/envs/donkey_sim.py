@@ -382,14 +382,21 @@ class DonkeyUnitySimHandler(IMesgHandler):
         # throttle_reward = 0.1 * (self.speed / 18.0)
         # return 1 + throttle_reward - math.fabs(self.cte / 5.0)
 
+        # if done:
+        #     # penalize the agent for getting off the road fast
+        #     norm_throttle = (self.last_throttle - MIN_THROTTLE) / (MAX_THROTTLE - MIN_THROTTLE)
+        #     #return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
+        #     return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
+        # # 1 per timesteps + throttle
+        # throttle_reward = THROTTLE_REWARD_WEIGHT * (self.last_throttle / MAX_THROTTLE)
+        # return 1 + ((1.0 - (math.fabs(self.cte) / self.max_cte)) * throttle_reward)
+
+        # reward for speed on trained model
         if done:
-            # penalize the agent for getting off the road fast
-            norm_throttle = (self.last_throttle - MIN_THROTTLE) / (MAX_THROTTLE - MIN_THROTTLE)
-            #return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
-            return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
-        # 1 per timesteps + throttle
-        throttle_reward = THROTTLE_REWARD_WEIGHT * (self.last_throttle / MAX_THROTTLE)
-        return 1 + ((1.0 - (math.fabs(self.cte) / self.max_cte)) * throttle_reward)
+            return -1.0
+        speed_rate = self.speed * MIN_THROTTLE
+        return speed_rate ** 2
+
 
     # ------ Socket interface ----------- #
 

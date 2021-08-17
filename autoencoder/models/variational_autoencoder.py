@@ -32,7 +32,7 @@ class VAE(nn.Module):
     :param flatten_size: (int)
     """
 
-    def __init__(self, z_size, c_hid=32, num_image_channels=3, learning_rate=0.0001, flatten_size=6144):
+    def __init__(self, z_size, c_hid=64, num_image_channels=3, learning_rate=0.0001, flatten_size=12288):
         super(VAE, self).__init__()
         # AE input and output shapes
         self.z_size = z_size
@@ -62,8 +62,11 @@ class VAE(nn.Module):
             nn.Conv2d(4 * self.c_hid, 8 * self.c_hid, kernel_size=4, stride=2),
             nn.ReLU(),
             nn.Flatten(),  # Image grid to single feature vector
-            # Print()
+            #Print()
         )
+
+        # shape_before_flatten = self.encoder(torch.ones((1,) + (3, 80, 160))).shape[1:]
+        # print(shape_before_flatten)
 
         self.fc1 = nn.Linear(self.flatten_size, self.z_size)
         self.fc2 = nn.Linear(self.flatten_size, self.z_size)
@@ -81,7 +84,7 @@ class VAE(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(self.c_hid, self.image_channels, kernel_size=4, stride=2),
             nn.Sigmoid(),
-            # Print()
+            #Print()
         )
 
     def reparameterize(self, mu, logvar):
@@ -110,7 +113,7 @@ class VAE(nn.Module):
         :return: (torch.Tensor)
         """
         z = self.fc3(z)
-        z = z.view(z.shape[0], 256, 3, 8)
+        z = z.view(z.shape[0], 512, 3, 8)
         z = self.decoder(z)
         return z
 

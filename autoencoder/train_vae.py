@@ -56,15 +56,15 @@ class AddGaussianNoise(object):
 
 
 def save_reconstructed_images(recon_images, epoch):
-    save_image(recon_images.cpu(), f"training-images/reconstructed{epoch}.jpg")
+    save_image(recon_images.cpu(), f"training-images/track/reconstructed{epoch}.jpg")
 
 
 def save_noisy_images(recon_images, epoch):
-    save_image(recon_images.cpu(), f"training-images/noisy{epoch}.jpg")
+    save_image(recon_images.cpu(), f"training-images/track/noisy{epoch}.jpg")
 
 
 def save_raw_images(recon_images, epoch):
-    save_image(recon_images.cpu(), f"training-images/raw{epoch}.jpg")
+    save_image(recon_images.cpu(), f"training-images/track/raw{epoch}.jpg")
 
 
 def add_noise(inputs, noise_factor=0.3):
@@ -151,7 +151,7 @@ def show_img(img):
 
 
 def save_single_reconstructed_images(recon_images, epoch):
-    save_image(recon_images.cpu(), f"training-images/vae_single{epoch+1}.jpg")
+    save_image(recon_images.cpu(), f"training-images/track/vae_single{epoch+1}.jpg")
 
 
 def pull_image():
@@ -179,7 +179,7 @@ def pull_and_convert_image():
 
 # pull_and_convert_image()
 
-model = VAE(z_size=args.z_size, c_hid=32, num_image_channels=3, learning_rate=args.learning_rate).to(device)
+model = VAE(z_size=args.z_size, c_hid=64, num_image_channels=3, learning_rate=args.learning_rate).to(device)
 # model = Autoencoder(image_channels=3,
 #                     base_channel_size=32,
 #                     latent_dim=32,
@@ -187,17 +187,17 @@ model = VAE(z_size=args.z_size, c_hid=32, num_image_channels=3, learning_rate=ar
 #                     learning_rate=0.0001).to(device)
 print(model)
 
-dataloader = DataLoader("images", 32)
-writer = SummaryWriter(log_dir='runs')
+dataloader = DataLoader("images/track", 64)
+ae_id = int(time.time())
+writer = SummaryWriter(log_dir=f'runs/track/vae/{ae_id}')
 
 # set the learning parameters
 lr = 0.0003
 epochs = 200
 batch_size = 8
 best_loss = np.inf
-ae_id = int(time.time())
-save_path = "logs/vae-{}_{}.pkl".format(args.z_size, ae_id)
-best_model_path = "logs/vae-{}_{}_best.pkl".format(args.z_size, ae_id)
+save_path = "logs/track/vae-{}_{}.pkl".format(args.z_size, ae_id)
+best_model_path = "logs/track/vae-{}_{}_best.pkl".format(args.z_size, ae_id)
 os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
 # we're using Adam optimizer here again

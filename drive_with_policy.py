@@ -4,7 +4,6 @@ from pathlib import Path
 
 import gym
 import numpy as np
-#import tensorflow as tf
 from loguru import logger
 from stable_baselines3 import SAC
 
@@ -14,54 +13,70 @@ from environment.plotting import VAEVideo
 from environment.utility import load_ae_controller, seed
 from environment.wrappers import make_wrappers
 from callbacks import TensorboardCallback
-
-
-#tf.logging.set_verbosity(tf.logging.ERROR)
+from torch.utils.tensorboard import SummaryWriter
+import logging
+import os
 
 
 def main(args: dict):
     vae = load_ae_controller(args["ae_path"])
 
-    env = gym.make(args["environment_id"])
-    mp4_path = args["monitoring_dir"] / time.strftime("VAE_video_%H%M%S.mp4")
-    logger.debug("Saving video to {mp4_path}")
-    #with VAEVideo(mp4_path, args["video_width"], args["video_height"]) as video:
+    conf = {
+        "exe_path": "/home/matthewi/project/DonkeySimLinux/donkey_sim.x86_64",
+        "host": "127.0.0.1",
+        "port": 9091,
+        "car_name": "training",
+        "max_cte": 4.0
+    }
+    env = gym.make(args["environment_id"], conf=conf)
+    # writer = SummaryWriter(comment="-" + args["environment_id"])
+
     try:
         env = make_wrappers(env, vae)
 
-        model = SAC.load(args["model_path"])
-        test_callback = TensorboardCallback()
+        directory = 'logs/speed-reward'
+        files = os.listdir(directory)
+        sorted_files = [str(i) + ".zip" for i in sorted([int(num.split('.')[0]) for num in files])]
 
-        seed(42, env)
-        obs = env.reset()
-        for _ in range(args["max_time_steps"]):
-            #video.write_frame(env.raw_observation, vae.decode(obs)[0])
-            action = model.predict(obs, deterministic=True)[0]
-            obs, _, done, _ = env.step(action)
-            print(f'done: {done}')
-            if done:
-                break
+        i = 0
+        for filename in sorted_files:
+            i += 1000
+            writer = SummaryWriter('./policy-log/speed-reward/' + 'speed-reward-' + str(i), args["environment_id"])
+            model_path = os.path.join(directory, filename)
+            # checking if it is a file
+            if os.path.isfile(model_path):
+                print(model_path)
+
+                model = SAC.load(model_path)
+
+                distance = 0.0
+                speed = 0.0
+                timestep = 0
+
+                seed(42, env)
+                obs = env.reset()
+                for idx in range(args["max_time_steps"]):
+                    timestep = idx + 1
+                    action = model.predict(obs, deterministic=True)[0]
+                    obs, _, done, info = env.step(action)
+                    distance = info['distance']
+                    speed = info['speed']
+                    writer.add_scalar("distance", distance, timestep)
+                    writer.add_scalar("speed", speed, timestep)
+                    if done:
+                        logging.info("done!")
+                        break
+                logging.info(distance)
     finally:
+        logging.info(f'timestep: {timestep}')
+        logging.info(f'distance: {distance}')
+        logging.info(f'speed: {speed}')
+        logging.info('Finished')
         env.close()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate a video of a policy")
+    parser = argparse.ArgumentParser(description="Use policy to drive car")
     parser = common_args(parser)
-    parser.add_argument(
-        "--max-time-steps",
-        type=int,
-        default=5000,
-        help="Maximum number of timesteps to run simulation for.",
-    )
-    parser.add_argument(
-        "-width", "--video-width", help="Width of final video", type=int, default=320,
-    )
-    parser.add_argument(
-        "-height",
-        "--video-height",
-        help="Height of final video",
-        type=int,
-        default=240,
-    )
+    parser.add_argument("--max-time-steps", type=int, default=5000, help="Maximum timesteps to run simulation.")
     main(parse_args(parser))
