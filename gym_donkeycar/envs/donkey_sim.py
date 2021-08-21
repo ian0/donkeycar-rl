@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 
 from configs.config import REWARD_CRASH, CRASH_REWARD_WEIGHT, THROTTLE_REWARD_WEIGHT, MAX_THROTTLE, MIN_THROTTLE
 
-#from config import REWARD_CRASH, CRASH_REWARD_WEIGHT, THROTTLE_REWARD_WEIGHT
+
+# from config import REWARD_CRASH, CRASH_REWARD_WEIGHT, THROTTLE_REWARD_WEIGHT
 # REWARD_CRASH: -10
 # CRASH_REWARD_WEIGHT: 5
 # THROTTLE_REWARD_WEIGHT: 0.1
-
 
 
 class DonkeyUnitySimContoller:
@@ -147,6 +147,8 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.z_last = 0.0
         self.distance = 0.0
         self.first_iter = True
+        self.throttle_average = 0.0
+        self.action_count = 0
 
     def on_connect(self, client):
         logger.debug("socket connected")
@@ -299,15 +301,19 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.z_last = 0.0
         self.distance = 0.0
         self.first_iter = True
+        self.throttle_average = 0.0
+        self.action_count = 0
 
     def get_sensor_size(self):
         return self.camera_img_size
 
     def take_action(self, action):
         self.last_throttle = action[1]
+        self.action_count+=1
+        self.throttle_average = self.throttle_average * (self.action_count - 1) / self.action_count + \
+                                action[1] / self.action_count
+
         self.send_control(action[0], action[1])
-
-
 
     def observe(self):
         while self.last_obs is self.image_array:
@@ -338,7 +344,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
             "distance": self.distance
         }
 
-        #logger.info(info.get("distance"))
+        # logger.info(info.get("distance"))
         self.x_last = self.x
         self.y_last = self.y
         self.z_last = self.z
@@ -385,18 +391,21 @@ class DonkeyUnitySimHandler(IMesgHandler):
         # if done:
         #     # penalize the agent for getting off the road fast
         #     norm_throttle = (self.last_throttle - MIN_THROTTLE) / (MAX_THROTTLE - MIN_THROTTLE)
-        #     #return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
         #     return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
         # # 1 per timesteps + throttle
         # throttle_reward = THROTTLE_REWARD_WEIGHT * (self.last_throttle / MAX_THROTTLE)
         # return 1 + ((1.0 - (math.fabs(self.cte) / self.max_cte)) * throttle_reward)
 
-        # reward for speed on trained model
         if done:
-            return -1.0
-        speed_rate = self.speed * MIN_THROTTLE
-        return speed_rate ** 2
+            return REWARD_CRASH + CRASH_REWARD_WEIGHT * self.throttle_average
+        throttle_reward = THROTTLE_REWARD_WEIGHT * (self.last_throttle / MAX_THROTTLE)
+        return 1 + ((1.0 - (math.fabs(self.cte) / self.max_cte)) * throttle_reward)
 
+        # # reward for speed on trained model
+        # if done:
+        #     return -1.0
+        # speed_rate = self.speed * MIN_THROTTLE
+        # return speed_rate ** 2
 
     # ------ Socket interface ----------- #
 
@@ -478,27 +487,25 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.determine_episode_over = types.MethodType(ep_over_fn, self)
         logger.debug("custom ep_over fn set.")
 
-
     def check_adjusted_cte(self):
         if self.cte < 0:
             if (math.fabs(self.cte)) < (self.max_cte - 2):
                 self.over = True
         else:
-            if (math.fabs(self.cte)+3) > self.max_cte:
+            if (math.fabs(self.cte) + 3) > self.max_cte:
                 logger.debug(f"game over: cte {self.cte}")
                 self.over = True
-
 
     def determine_episode_over(self):
         # we have a few initial frames on start that are sometimes very large CTE when it's behind
         # the path just slightly. We ignore those.
-        #print(f'self.cte: {self.cte}, self.max_cte: {self.max_cte}')
+        # print(f'self.cte: {self.cte}, self.max_cte: {self.max_cte}')
         if math.fabs(self.cte) > 2 * self.max_cte:
             pass
-        #elif self.check_adjusted_cte():
+        # elif self.check_adjusted_cte():
         elif math.fabs(self.cte) > self.max_cte:
-             logger.debug(f"game over: cte {self.cte}")
-             self.over = True
+            logger.debug(f"game over: cte {self.cte}")
+            self.over = True
         elif self.hit != "none":
             logger.debug(f"game over: hit {self.hit}")
             self.over = True
@@ -585,20 +592,20 @@ class DonkeyUnitySimHandler(IMesgHandler):
         time.sleep(0.1)
 
     def send_cam_config(
-        self,
-        img_w=0,
-        img_h=0,
-        img_d=0,
-        img_enc=0,
-        fov=0,
-        fish_eye_x=0,
-        fish_eye_y=0,
-        offset_x=0,
-        offset_y=0,
-        offset_z=0,
-        rot_x=0,
-        rot_y=0,
-        rot_z=0
+            self,
+            img_w=0,
+            img_h=0,
+            img_d=0,
+            img_enc=0,
+            fov=0,
+            fish_eye_x=0,
+            fish_eye_y=0,
+            offset_x=0,
+            offset_y=0,
+            offset_z=0,
+            rot_x=0,
+            rot_y=0,
+            rot_z=0
     ):
         """Camera config
         set any field to Zero to get the default camera setting.
@@ -629,7 +636,8 @@ class DonkeyUnitySimHandler(IMesgHandler):
         time.sleep(0.1)
 
     def send_lidar_config(
-        self, degPerSweepInc, degAngDown, degAngDelta, numSweepsLevels, maxRange, noise, offset_x, offset_y, offset_z, rot_x
+            self, degPerSweepInc, degAngDown, degAngDelta, numSweepsLevels, maxRange, noise, offset_x, offset_y,
+            offset_z, rot_x
     ):
         """Lidar config
         the offset_x moves lidar left/right

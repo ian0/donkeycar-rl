@@ -34,14 +34,14 @@ def main(args: dict):
     try:
         env = make_wrappers(env, vae)
 
-        directory = 'logs/speed-reward'
+        directory = 'logs/vae-track-reward-2'
         files = os.listdir(directory)
         sorted_files = [str(i) + ".zip" for i in sorted([int(num.split('.')[0]) for num in files])]
 
         i = 0
         for filename in sorted_files:
             i += 1000
-            writer = SummaryWriter('./policy-log/speed-reward/' + 'speed-reward-' + str(i), args["environment_id"])
+            writer = SummaryWriter('./policy-log/track/' + 'track-speed-reward-' + str(i), args["environment_id"])
             model_path = os.path.join(directory, filename)
             # checking if it is a file
             if os.path.isfile(model_path):

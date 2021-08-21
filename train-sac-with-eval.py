@@ -56,7 +56,7 @@ def main(args: dict):
         test_callback = TensorboardCallback()
         # Save a checkpoint every 1000 steps
         id = int(time.time())
-        checkpoint_callback = CheckpointCallback(save_freq=1000, save_path="./logs/",
+        checkpoint_callback = CheckpointCallback(save_freq=1000, save_path="./logs/track/",
                                                  name_prefix="donkey_model")
         callback = CallbackList([checkpoint_callback, test_callback])
 
@@ -83,8 +83,8 @@ def main(args: dict):
                     use_sde_at_warmup=True,
                     use_sde=True,
                     sde_sample_freq=64,
-                    ).learn(total_timesteps=int(30000), eval_freq=50, n_eval_episodes=5,
-                            eval_log_path="./logs/", callback=callback)
+                    ).learn(total_timesteps=int(50000), eval_freq=50, n_eval_episodes=5,
+                            eval_log_path="./logs/track/", callback=callback)
 
         logger.info('save the model')
         # save the model

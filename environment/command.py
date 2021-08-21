@@ -33,8 +33,7 @@ def common_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument(
         "--model_path",
         type=Path,
-        #default=f"pretrained-models/policy/policy-donkey-generated-roads-{time}-32.zip",
-        default=f"pretrained-models/policy/policy-donkey-generated-roads-1628086109-32.zip",
+        default=f"pretrained-models/policy/policy-donkey-generated-track-{time}-32.zip",
         help="Path to the policy model (zip file).",
     )
     parser.add_argument(
