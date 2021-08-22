@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function
 import torch
 from torch import nn
 import torchvision.transforms as transforms
+from torchvision.transforms.functional import crop
 import numpy as np
 
 
@@ -120,8 +121,9 @@ class Autoencoder(nn.Module):
     def encode_raw_image(self, image):
        # image.to(self.device)
         transform = transforms.Compose([
-            transforms.Resize((80, 160)),
             transforms.ToTensor(),
+            transforms.Lambda(custom_crop),
+            transforms.Resize((80, 160)),
         ])
         image = transform(image)
         image = image.unsqueeze(0)
@@ -160,6 +162,9 @@ class Autoencoder(nn.Module):
         model.to(device)
         return model
 
+
+def custom_crop(image):
+    return crop(image, 40, 0, 80, 160)
 
 def load_ae(path=None, z_size=None, quantize=False):
     """

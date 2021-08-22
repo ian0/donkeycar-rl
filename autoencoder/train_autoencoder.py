@@ -140,6 +140,8 @@ for folder in args.folders:
 images = np.concatenate(images)
 n_samples = len(images)
 
+def custom_crop(image):
+    return transforms.crop(image, 40, 0, 80, 160)
 
 def show_img(img):
     plt.figure()
@@ -164,6 +166,7 @@ def pull_and_convert_image():
     image = Image.open(images[image_idx])
     # image.show()
     transform = transforms.Compose([
+        transforms.Lambda(custom_crop),
         transforms.Resize((80, 160)),
         transforms.ToTensor(),
     ])
@@ -185,7 +188,7 @@ model = Autoencoder(z_size=args.z_size, c_hid=32, num_image_channels=3, learning
 #                     learning_rate=0.0001).to(device)
 print(model)
 
-dataloader = DataLoader("images", 32)
+dataloader = DataLoader("images/road", 32)
 writer = SummaryWriter(log_dir='runs')
 
 # set the learning parameters

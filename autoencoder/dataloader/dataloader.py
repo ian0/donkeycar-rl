@@ -1,6 +1,7 @@
 import torch
 import torch.utils.data
 import torchvision.transforms as transforms
+from torchvision.transforms.functional import crop
 from torchvision import datasets as datasets
 
 
@@ -28,6 +29,7 @@ class DataLoader:
     @staticmethod
     def train_transformer():
         return transforms.Compose([
+            transforms.Lambda(custom_crop),
             transforms.Resize((80, 160)),
             transforms.ToTensor(),
         ])
@@ -35,6 +37,11 @@ class DataLoader:
     @staticmethod
     def val_transformer():
         return transforms.Compose([
+            transforms.Lambda(custom_crop),
             transforms.Resize((80, 160)),
             transforms.ToTensor(),
         ])
+
+def custom_crop(image):
+    return crop(image, 40, 0, 80, 160)
+
