@@ -5,7 +5,10 @@
 import numpy as np
 
 from autoencoder.models.autoencoder import Autoencoder
-
+from autoencoder.models.variational_autoencoder import VAE
+import torch
+import torchvision.transforms as transforms
+import matplotlib.pyplot as plt
 
 
 class AEController:
@@ -22,7 +25,8 @@ class AEController:
 
     def __init__(
         self,
-        z_size=32,
+        path,
+        z_size=64,
         input_dimension=(120, 160, 3),
         learning_rate=0.0001,
         kl_tolerance=0.5,
@@ -41,51 +45,40 @@ class AEController:
         self.batch_size = batch_size
         self.normalization_mode = normalization_mode
 
-        self.vae = None
-        self.target_vae = None
+        self.ae = None
+        self.target_ae = None
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         if z_size is not None:
-            # self.vae = ConvVAE(
-            #     z_size=self.z_size,
-            #     batch_size=self.batch_size,
-            #     learning_rate=self.learning_rate,
-            #     kl_tolerance=self.kl_tolerance,
-            #     is_training=True,
-            #     reuse=False,
-            # )
-            #
-            # self.target_vae = A(
-            #     z_size=self.z_size, batch_size=1, is_training=False, reuse=False
-            # )
-            self.autoencoder = Autoencoder.load('/home/matthewi/project/ahhh/donkeycar-rl/trained-models/autoencoder/ae-32_1627920759_best.pkl')
+            #self.autoencoder = Autoencoder.load('/home/matthewi/project/ahhh/donkeycar-rl/trained-models/autoencoder/ae-32_1627920759_best.pkl')
+            self.ae = VAE.load(path)
+            self.target_ae = VAE.load(path)
 
     def encode(self, observation):
         assert observation.shape == self.input_dimension, "{} != {}".format(
             observation.shape, self.input_dimension
         )
-        #observation = observation.copy().astype(np.float32) / 255.0
-        tensor_obs = self.autoencoder.encode_ndarray(observation)
-        return self.autoencoder.encode_ndarray(observation).cpu().numpy()
-        #return self.autoencoder.encode_from_raw_image(observation)
+        return self.ae.encode_ndarray(observation).cpu().numpy()
 
-
-    def decode(self, arr):
-        assert arr.shape == (1, self.z_size), "{} != {}".format(
-            arr.shape, (1, self.z_size)
+    def decode(self, encoded):
+        assert encoded.shape == (1, self.z_size), "{} != {}".format(
+            encoded.shape, (1, self.z_size)
         )
         # Decode
-        arr = self.target_vae.decode(arr)
-        # Denormalize
-        arr = (255 * np.clip(arr, 0, 1)).astype(np.uint8)
-        return arr
+        encoded_tensor = torch.from_numpy(encoded).to(self.device)
+        decoded = self.target_ae.decode_forward(encoded_tensor)
+        decoded = torch.squeeze(decoded)
+        trans = transforms.ToPILImage()
+        decoded_image = trans(decoded)
+        # plt.imshow(trans(decoded))
+        # plt.show()
+        # # Denormalize
+        # decoded = (255 * np.clip(decoded.numpy(), 0, 1)).astype(np.uint8)
+        return decoded_image
 
     def save(self, path):
-        self.target_vae.save(path)
-
-    # def load(self, path):
-    #     self.target_vae = ConvVAE.load(path)
-    #     self.z_size = self.target_vae.z_size
+        self.target_ae.save(path)
 
     def set_target_params(self):
-        params = self.vae.get_params()
-        self.target_vae.set_params(params)
+        params = self.ae.get_params()
+        self.target_ae.set_params(params)
