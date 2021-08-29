@@ -141,7 +141,7 @@ class Autoencoder(nn.Module):
             observation = torch.tensor(observation.copy(), dtype=torch.float)
             #print(observation.shape)
             transform = transforms.Compose(
-                [transforms.Resize((80, 160)), transforms.Normalize(0, 255)]
+                [transforms.Lambda(custom_crop), transforms.Resize((80, 160)), transforms.Normalize(0, 255)]
             )
             observation = transform(observation)
             #print(observation.shape)

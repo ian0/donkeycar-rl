@@ -29,17 +29,17 @@ class DataLoader:
     @staticmethod
     def train_transformer():
         return transforms.Compose([
+            transforms.ToTensor(),
             transforms.Lambda(custom_crop),
             transforms.Resize((80, 160)),
-            transforms.ToTensor(),
         ])
 
     @staticmethod
     def val_transformer():
         return transforms.Compose([
+            transforms.ToTensor(),
             transforms.Lambda(custom_crop),
             transforms.Resize((80, 160)),
-            transforms.ToTensor(),
         ])
 
 def custom_crop(image):
