@@ -11,20 +11,20 @@ import torch
 import yaml
 
 import gym_donkeycar
-from environment.utility import seed, load_ae_controller
+from environment.utility import seed
 from environment.wrappers import make_wrappers
 from environment.command import common_args, parse_args
 import logging
 import time
+from environment.controller import AEController
 
 from callbacks import TensorboardCallback
 
 from stable_baselines3.common.evaluation import evaluate_policy
 
-
-#tf.logging.set_verbosity(tf.logging.DEBUG)
-
-
+def load_ae_controller(path=None):
+    ae_controller = AEController(path)
+    return ae_controller
 
 
 def main(args: dict):
@@ -131,8 +131,8 @@ def main(args: dict):
     finally:
         # logger.info(f'Trained for {env.get_total_steps()}')
         logger.info(f'Saving model to {args["model_path"]}, don\'t quit!')
-        model.save(args["model_path"])
-        env.close()
+        # model.save(args["model_path"])
+        # env.close()
         logging.info('Finished')
 
 
