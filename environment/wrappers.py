@@ -36,11 +36,12 @@ def make_wrappers(env: gym.Env, vae) -> gym.Env:
         The wrapped environment.
     """
     env = VAEWrapper(env, vae)
-    env = DonkeyCarActionWrapper(env, max_throttle=0.15, max_steering_angle=0.5)
+    env = DonkeyCarActionWrapper(env, max_throttle=0.25, max_steering_angle=0.5)
     env = RenderWrapper(env)
-    env = NoSteeringAtStartWrapper(env, 80)
+    # env = NoSteeringAtStartWrapper(env, 80)
     # env = MaxTimeStepsSafetyValve(env, 10000)
     # env = HistoryWrapper(env, horizon=10)
+    # env = SmallSteeringRewardWrapper(env)
     env = ActionHistoryWrapper(env, vae, 5)
     env = BufferHistoryWrapper(env, 10)
     env = DonkeyViewWrapper(env, vae)
@@ -61,7 +62,7 @@ class VAEWrapper(gym.ObservationWrapper):
         self.log_video_size = True
 
     def observation(self, observation):
-        #logger.info('in VAEWrapper')
+        # logger.info('in VAEWrapper')
         self.raw_observation = observation.copy()
         # When I generate videos I set the image sensor size to be bigger.
         # But the VAE expects the same shape as it was trained with.
@@ -101,14 +102,25 @@ class DonkeyCarActionWrapper(gym.ActionWrapper):
             high=np.array([self.max_steering_angle, self.max_throttle]),
             dtype=np.float32,
         )
+        self.delay_action_count = 0
 
     def action(self, action):
-        #logger.info('in DonkeyCarActionWrapper')
-        action[ACTION_STEERING] = np.clip(
-            action[ACTION_STEERING], -self.max_steering_angle, self.max_steering_angle
-        )
-        action[ACTION_THROTTLE] = np.clip(action[ACTION_THROTTLE], 0.01, self.max_throttle)
+        # logger.info(f'DonkeyCarActionWrapper delay_action_count: {self.delay_action_count}')
+        if self.delay_action_count < 2:
+            action[ACTION_STEERING] = 0.5
+            action[ACTION_THROTTLE] = 0.001
+        else:
+            action[ACTION_STEERING] = np.clip(
+                action[ACTION_STEERING], -self.max_steering_angle, self.max_steering_angle
+            )
+            action[ACTION_THROTTLE] = np.clip(action[ACTION_THROTTLE], 0.05, self.max_throttle)
+        self.delay_action_count += 1
         return action
+
+    def reset(self, **kwargs):
+        self.delay_action_count = 0
+        return self.env.reset(**kwargs)
+
 
 
 class NoSteeringAtStartWrapper(gym.ActionWrapper):
@@ -117,12 +129,6 @@ class NoSteeringAtStartWrapper(gym.ActionWrapper):
         self.n_steps = n_steps
         self.counter = 0
 
-    # def reset(self, **kwargs):
-    #     #self.n_steps = 40
-    #     self.counter = 0
-    #     logger.debug("********************resetting counter*****************")
-    #     pass
-    #     #return self.env.reset(**kwargs)
 
     def action(self, action):
         # print(f'counter: {self.counter}, n_steps: {self.n_steps}')
@@ -147,38 +153,10 @@ class SmallSteeringRewardWrapper(gym.RewardWrapper):
         """Prefer zero angle, weighted by a gaussian normalised to 1.0."""
         angle = action[ACTION_STEERING]
         if reward > 0:
-            logger.debug((reward, angle, norm.pdf(angle), reward * norm.pdf(angle)))
+            # logger.debug((reward, angle, norm.pdf(angle), reward * norm.pdf(angle)))
             return reward * norm.pdf(angle)
         else:
             return reward
-
-
-class PIDActionWrapper(gym.ActionWrapper):
-    def __init__(self, env: gym.Env, p: float = 0.0, i: float = 0.1, d: float = 0.0):
-        super(PIDActionWrapper, self).__init__(env)
-        self.p = p
-        self.i = i
-        self.d = d
-
-    def reset(self, **kwargs):
-        self.pid = PID(self.p, self.i, self.d, sample_time=1, setpoint=0.0)
-        self.previous_steering_angle = 0
-        return self.env.reset(**kwargs)
-
-    def action(self, action):
-        next_action = self.pid(self.previous_steering_angle, dt=1)
-
-        # Update desired steering angle, if necessary
-        self.pid.setpoint = action[ACTION_STEERING]
-
-        logger.debug(f"Requested {action[ACTION_STEERING]}, damped {next_action}")
-
-        # Set the current steering action to that provided by the PID
-        action[ACTION_STEERING] = next_action
-
-        # Update the history for the next time
-        self.previous_steering_angle = next_action
-        return action
 
 
 class MaxTimeStepsSafetyValve(gym.Wrapper):
@@ -274,7 +252,6 @@ class HistoryWrapper(gym.Wrapper):
         self.low, self.high = low, high
         self.obs_history = np.zeros(low_obs.shape, low_obs.dtype)
         self.action_history = np.zeros(np.expand_dims(self.low_action, axis=0).shape, low_action.dtype)
-        #self.action_history = np.zeros(low_action.shape, low_action.dtype)
 
     def _create_obs_from_history(self):
         return np.concatenate((self.obs_history, self.action_history), axis=1)
@@ -298,6 +275,7 @@ class HistoryWrapper(gym.Wrapper):
         self.action_history[..., -action.shape[-1]:] = action
         return self._create_obs_from_history(), reward, done, info
 
+
 class DonkeyViewWrapper(gym.ObservationWrapper):
     def __init__(self, env, vae):
         gym.ObservationWrapper.__init__(self, env)
@@ -308,15 +286,14 @@ class DonkeyViewWrapper(gym.ObservationWrapper):
         self.game_display = None
         self.raw_observation = None
         self.decoded_surface = None
-        self.BLACK = (0,0,0)
-        self.WHITE = (255,255,255)
+        self.BLACK = (0, 0, 0)
+        self.WHITE = (255, 255, 255)
         self.YELLOW = (255, 255, 0)
         self.BLUE = (0, 0, 255)
         self.reconstructed_image = None
         self.vae_observation = None
         self.game_over = False
         self.start_process()
-
 
     def main_loop(self):
         pygame.init()
@@ -329,12 +306,9 @@ class DonkeyViewWrapper(gym.ObservationWrapper):
             self.upateScreen()
             clock.tick(30)
 
-
     def start_process(self):
         """Start main loop process."""
         self.process = Thread(target=self.main_loop)
-        # Make it a deamon, so it will be deleted at the same time
-        # of the main process
         self.process.daemon = True
         self.process.start()
 
@@ -350,24 +324,18 @@ class DonkeyViewWrapper(gym.ObservationWrapper):
             self.game_display.blit(pygame_surface, pygame_surface.get_rect(center=(320, 160)))
             pygame.display.update()
 
-            #print("here")
-
     def observation(self, observation):
         # logger.info(observation.shape)
         vae_dim = self.vae.z_size
         self.vae_observation = observation.copy()[0, :vae_dim]
         encoded = self.vae_observation.reshape(1, self.vae.z_size)
-        #encoded = self.vae_observation[:, :vae_dim]
+        # encoded = self.vae_observation[:, :vae_dim]
         self.reconstructed_image = self.vae.decode(encoded)
 
         # plt.imshow(self.reconstructed_image)
         # plt.show()
         return observation
 
-    # def reset(self, **kwargs):
-    #     logger.info("********** reset")
-    #     self.game_display.fill(self.WHITE)
-    #     return self.env.reset(**kwargs)
 
 
 class ActionHistoryWrapper(gym.Wrapper):
@@ -396,30 +364,19 @@ class ActionHistoryWrapper(gym.Wrapper):
         self.command_history = np.zeros((1, self.n_commands * self.n_command_history), dtype=np.float32)
         if self.n_command_history > 0:
             observation = np.concatenate((observation, self.command_history), axis=-1)
-        #logger.info(f'reset observation: {observation}')
+        # logger.info(f'reset observation: {observation}')
         return observation
-
-
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)
-        # t = (action[1] + 1) / 2
-        # # Convert from [0, 1] to [min, max]
-        # action[1] = (1 - t) * self.min_throttle + self.max_throttle * t
-        #logger.info(f'steering: {action[0]}, throttle: {action[1]}')
         if action[1] == 0.0:
             action[1] = 0.1
 
-
         if self.n_command_history > 0:
-            # prev_steering = self.command_history[0, -2]
-            # max_diff = (MAX_STEERING_DIFF - 1e-5) * ( 2 * MAX_STEERING)
-            # diff = np.clip(action[0] - prev_steering, -max_diff, max_diff)
-            # action[0] = prev_steering + diff
             self.command_history = np.roll(self.command_history, shift=-self.n_commands, axis=-1)
             self.command_history[..., -self.n_commands:] = action
             observation = np.concatenate((observation, self.command_history), axis=-1)
-            #            logger.info(observation[0, -10:-1])
+            # logger.info(observation[0, -10:-1])
             # logger.info(f'{observation[0, -10]}, {observation[0, -9]}, {observation[0, -8]}, {observation[0, -7]}, '
             #             f'{observation[0, -6]},{observation[0, -5]}, {observation[0, -4]}, {observation[0, -3]},'
             #             f' {observation[0, -2]}, {observation[0, -1]}')
