@@ -8,11 +8,15 @@ from simple_pid import PID
 import cv2
 import pygame
 import matplotlib.pyplot as plt
-from configs.config import MAX_THROTTLE, MAX_STEERING, MIN_THROTTLE
+from configs.config import MAX_THROTTLE, MAX_STEERING, MIN_THROTTLE, STEERING_THRESHOLD
 
 from threading import Event, Thread
 
 from gym_donkeycar.envs.donkey_env import DonkeyUnitySimContoller
+import numpy as np
+from scipy.signal import butter, filtfilt, freqz
+from matplotlib import pyplot as plt
+
 
 ACTION_STEERING = 0
 ACTION_THROTTLE = 1
@@ -36,13 +40,15 @@ def make_wrappers(env: gym.Env, vae) -> gym.Env:
         The wrapped environment.
     """
     env = VAEWrapper(env, vae)
-    env = DonkeyCarActionWrapper(env, max_throttle=0.25, max_steering_angle=0.5)
+    env = DonkeyCarActionWrapper(env, max_throttle=MAX_THROTTLE, max_steering_angle=0.5)
     env = RenderWrapper(env)
     # env = NoSteeringAtStartWrapper(env, 80)
     # env = MaxTimeStepsSafetyValve(env, 10000)
     # env = HistoryWrapper(env, horizon=10)
-    # env = SmallSteeringRewardWrapper(env)
-    env = ActionHistoryWrapper(env, vae, 5)
+    #env = SmoothSteeringwithMovingAverage(env)
+    env = SmallSteeringRewardWrapper(env)
+    # env = SmoothSteeringWithThresholdRewardWrapper(env)
+    env = ActionHistoryWrapper(env, vae, 10)
     env = BufferHistoryWrapper(env, 10)
     env = DonkeyViewWrapper(env, vae)
     return env
@@ -122,22 +128,42 @@ class DonkeyCarActionWrapper(gym.ActionWrapper):
         return self.env.reset(**kwargs)
 
 
+class SmoothSteeringWithThresholdRewardWrapper(gym.RewardWrapper):
+    def __init__(self, env: gym.Env):
+        super(SmoothSteeringWithThresholdRewardWrapper, self).__init__(env)
 
-class NoSteeringAtStartWrapper(gym.ActionWrapper):
-    def __init__(self, env: gym.Env, n_steps=80):
-        super(NoSteeringAtStartWrapper, self).__init__(env)
-        self.n_steps = n_steps
-        self.counter = 0
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        return observation, self.reward(reward, action), done, info
 
+    def reward(self, reward, action):
+        """Want to move steering in small increments."""
+        steering_angle = action[ACTION_STEERING]
+        if reward > 0:
+            if abs(steering_angle) > STEERING_THRESHOLD:
+                return reward * 0.5
+            elif abs(steering_angle) > (2 * STEERING_THRESHOLD):
+                return reward * 0.25
+            else:
+                return reward
+        else:
+            return reward
+
+
+class SmoothSteeringwithMovingAverage(gym.ActionWrapper):
+    def __init__(self, env: gym.Env):
+        super(SmoothSteeringwithMovingAverage, self).__init__(env)
+        self.last_angle = 0.0
+        self.second_last_angle = 0.0
+
+    def moving_average(self, a, n=3):
+        ret = np.cumsum(a, dtype=float)
+        ret[n:] = ret[n:] - ret[:-n]
+        return ret[n - 1:] / n
 
     def action(self, action):
-        # print(f'counter: {self.counter}, n_steps: {self.n_steps}')
-        if self.counter < self.n_steps:
-            action[ACTION_STEERING] = 0
-            self.counter += 1
-        elif self.counter == self.n_steps:
-            logger.debug("Enabling steering")
-            self.counter += 1
+        steering_actions = [self.second_last_angle, self.last_angle, action[ACTION_STEERING]]
+        action[ACTION_STEERING] = self.moving_average(steering_actions)
         return action
 
 
@@ -382,3 +408,6 @@ class ActionHistoryWrapper(gym.Wrapper):
             #             f' {observation[0, -2]}, {observation[0, -1]}')
 
         return observation, reward, done, info
+
+
+
