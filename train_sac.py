@@ -3,22 +3,29 @@ import argparse
 import gym
 #import tensorflow as tf
 from loguru import logger
-from stable_baselines3 import HerReplayBuffer, SAC
+from stable_baselines3 import SAC
+#from models.custom_sac import SAC
+from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from stable_baselines3.sac import MlpPolicy
 import torch
 import yaml
 
 import gym_donkeycar
-from environment.utility import seed, load_ae_controller
+from environment.utility import seed
 from environment.wrappers import make_wrappers
 from environment.command import common_args, parse_args
 import logging
+import time
+from environment.controller import AEController
 
 from callbacks import TensorboardCallback
+from environment.custom_reward import reward2, reward3
 
-from stable_baselines3.common.envs import BitFlippingEnv
+from stable_baselines3.common.evaluation import evaluate_policy
 
-#tf.logging.set_verbosity(tf.logging.DEBUG)
+def load_ae_controller(path=None):
+    ae_controller = AEController(path)
+    return ae_controller
 
 
 def main(args: dict):
@@ -28,7 +35,15 @@ def main(args: dict):
 
     vae = load_ae_controller(args["ae_path"])
 
-    env = gym.make(args["environment_id"])
+    train_conf = {"exe_path": "/home/matthewi/project/DonkeySimLinux/donkey_sim.x86_64",
+                  "host": "127.0.0.1",
+                  "port": 9091,
+                  "car_name": "training",
+                  "max_cte": 4.0
+                  }
+
+    env = gym.make(args["environment_id"], conf=train_conf)
+    #env.set_reward_fn(reward3)
     try:
         env = make_wrappers(env, vae)
 
@@ -40,41 +55,29 @@ def main(args: dict):
             video_callable=lambda episode: episode % 5,  # Dump every 5 episodes
         )
 
-        with open("hyperparams/sac.yaml", "r") as f:
-            hyperparams_dict = yaml.safe_load(f)
-            hyperparams = hyperparams_dict[args["environment_id"]]
-            logger.debug(f"Policy hyperparameters: {hyperparams}")
-
         test_callback = TensorboardCallback()
+        # Save a checkpoint every 1000 steps
+        id = int(time.time())
+        checkpoint_callback = CheckpointCallback(save_freq=1000, save_path="./logs/track/",
+                                                 name_prefix="donkey_model")
+        callback = CallbackList([checkpoint_callback, test_callback])
 
-        policy = dict(activation_fn=torch.nn.ReLU, net_arch=[32, 32], use_sde=True)
+        seed(42, env)
 
+        policy = dict(activation_fn=torch.nn.ReLU, net_arch=[64, 64], use_sde=True, log_std_init=-2)
 
-        # model = SAC(env=env,
-        #             policy=MlpPolicy,
-        #             policy_kwargs=policy,
-        #             buffer_size=30000,
-        #             learning_starts=0,
-        #             train_freq=(1, "episode"),
-        #             batch_size=32,
-        #             verbose=2,
-        #             gradient_steps=2,
-        #             learning_rate=0.0003,
-        #             tensorboard_log=str(args["tensorboard_dir"]),
-        #             ent_coef='auto_0.1',
-        #             gamma=0.9,
-        #             tau=0.001
-        #             )
+        logger.info('create model and start learning')
+
         model = SAC(MlpPolicy,
                     policy_kwargs=policy,
                     env=env,
                     verbose=1,
-                    batch_size=64,
+                    batch_size=256,
                     buffer_size=30000,
                     learning_starts=0,
-                    gradient_steps=600,
+                    gradient_steps=64,
                     train_freq=(1, "episode"),
-                    ent_coef='auto_0.1',
+                    ent_coef='auto',
                     learning_rate=3e-4,
                     tensorboard_log=str(args["tensorboard_dir"]),
                     gamma=0.99,
@@ -84,36 +87,25 @@ def main(args: dict):
                     sde_sample_freq=64,
                     )
 
+        model.learn(total_timesteps=int(50000), callback=callback)
+
+        logger.info('save the model')
+        # save the model
+        model.save("sac_donkeycar")
+
+        logger.info('save the replay buffer')
+        # now save the replay buffer too
+        model.save_replay_buffer("sac_donkeycar_replay_buffer")
 
 
-
-
-
-
-
-        #     SAC(
-        #     "MlpPolicy",
-        #     env,
-        #     tensorboard_log=str(args["tensorboard_dir"]),
-        #     verbose=1,
-        #     learning_starts=0,  # default 100
-        #     seed=42,
-        #     **hyperparams,
-        # )
-
-        seed(42, env)
-
-        logger.info(f"Learning. CTRL+C to quit.")
-        model.learn(total_timesteps=30000, log_interval=1, callback=test_callback)
-        #model.learn(total_timesteps=30000, log_interval=1)
     except KeyboardInterrupt as e:
         logging.info('Finished early')
         pass
     finally:
         # logger.info(f'Trained for {env.get_total_steps()}')
         logger.info(f'Saving model to {args["model_path"]}, don\'t quit!')
-        model.save(args["model_path"])
-        env.close()
+        # model.save(args["model_path"])
+        # env.close()
         logging.info('Finished')
 
 
