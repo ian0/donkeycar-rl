@@ -72,7 +72,7 @@ def main(args: dict):
                     policy_kwargs=policy,
                     env=env,
                     verbose=1,
-                    batch_size=256,
+                    batch_size=64,
                     buffer_size=30000,
                     learning_starts=0,
                     gradient_steps=64,

@@ -46,10 +46,10 @@ def make_wrappers(env: gym.Env, vae) -> gym.Env:
     # env = MaxTimeStepsSafetyValve(env, 10000)
     # env = HistoryWrapper(env, horizon=10)
     #env = SmoothSteeringwithMovingAverage(env)
-    env = SmallSteeringRewardWrapper(env)
+    env = SmoothSteeringWithNormalDistReward(env)
     # env = SmoothSteeringWithThresholdRewardWrapper(env)
-    env = ActionHistoryWrapper(env, vae, 10)
-    env = BufferHistoryWrapper(env, 10)
+    env = ActionHistoryWrapper(env, vae, 5)
+    # env = BufferHistoryWrapper(env, 10)
     env = DonkeyViewWrapper(env, vae)
     return env
 
@@ -128,9 +128,9 @@ class DonkeyCarActionWrapper(gym.ActionWrapper):
         return self.env.reset(**kwargs)
 
 
-class SmoothSteeringWithThresholdRewardWrapper(gym.RewardWrapper):
+class SmoothSteeringWithThresholdReward(gym.RewardWrapper):
     def __init__(self, env: gym.Env):
-        super(SmoothSteeringWithThresholdRewardWrapper, self).__init__(env)
+        super(SmoothSteeringWithThresholdReward, self).__init__(env)
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)
@@ -142,10 +142,6 @@ class SmoothSteeringWithThresholdRewardWrapper(gym.RewardWrapper):
         if reward > 0:
             if abs(steering_angle) > STEERING_THRESHOLD:
                 return reward * 0.5
-            elif abs(steering_angle) > (2 * STEERING_THRESHOLD):
-                return reward * 0.25
-            else:
-                return reward
         else:
             return reward
 
@@ -167,9 +163,9 @@ class SmoothSteeringwithMovingAverage(gym.ActionWrapper):
         return action
 
 
-class SmallSteeringRewardWrapper(gym.RewardWrapper):
+class SmoothSteeringWithNormalDistReward(gym.RewardWrapper):
     def __init__(self, env: gym.Env):
-        super(SmallSteeringRewardWrapper, self).__init__(env)
+        super(SmoothSteeringWithNormalDistReward, self).__init__(env)
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)
