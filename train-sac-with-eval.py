@@ -1,16 +1,12 @@
 import argparse
 
 import gym
-#import tensorflow as tf
+
 from loguru import logger
 from stable_baselines3 import SAC
-#from models.custom_sac import SAC
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from stable_baselines3.sac import MlpPolicy
 import torch
-import yaml
-
-import gym_donkeycar
 from environment.utility import seed
 from environment.wrappers import make_wrappers
 from environment.command import common_args, parse_args
@@ -19,6 +15,7 @@ import time
 from environment.controller import AEController
 
 from callbacks import TensorboardCallback
+from environment.custom_reward import reward2, reward3
 
 from stable_baselines3.common.evaluation import evaluate_policy
 
@@ -42,6 +39,7 @@ def main(args: dict):
                   }
 
     env = gym.make(args["environment_id"], conf=train_conf)
+    env.set_reward_fn(reward3)
     try:
         env = make_wrappers(env, vae)
 

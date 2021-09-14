@@ -5,7 +5,7 @@
 
 #
 # # Reward parameters
-THROTTLE_REWARD_WEIGHT = 0.4
+THROTTLE_REWARD_WEIGHT = 0.2
 # JERK_REWARD_WEIGHT = 0.0
 #
 # # very smooth control: 10% -> 0.2 diff in steering allowed (requires more training)
@@ -30,3 +30,5 @@ N_COMMAND_HISTORY = 20
 MAX_CTE_ERROR = 2.0
 # Level to use for training
 LEVEL = 0
+
+STEERING_THRESHOLD = 0.15
