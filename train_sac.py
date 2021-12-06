@@ -104,8 +104,8 @@ def main(args: dict):
     finally:
         # logger.info(f'Trained for {env.get_total_steps()}')
         logger.info(f'Saving model to {args["model_path"]}, don\'t quit!')
-        # model.save(args["model_path"])
-        # env.close()
+        model.save(args["model_path"])
+        env.close()
         logging.info('Finished')
 
 
