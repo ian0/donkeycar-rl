@@ -17,6 +17,7 @@ from PIL import Image
 from gym_donkeycar.core.fps import FPSTimer
 from gym_donkeycar.core.message import IMesgHandler
 from gym_donkeycar.core.sim_client import SimClient
+from scipy.stats import norm
 
 logger = logging.getLogger(__name__)
 
@@ -388,18 +389,23 @@ class DonkeyUnitySimHandler(IMesgHandler):
         # throttle_reward = 0.1 * (self.speed / 18.0)
         # return 1 + throttle_reward - math.fabs(self.cte / 5.0)
 
+        if done:
+            # penalize the agent for getting off the road fast
+            norm_throttle = (self.last_throttle - MIN_THROTTLE) / (MAX_THROTTLE - MIN_THROTTLE)
+            return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
+        # 1 per timesteps + throttle
+        throttle_reward = THROTTLE_REWARD_WEIGHT * (self.last_throttle / MAX_THROTTLE)
+        return 1 + ((1.0 - (math.fabs(self.cte) / self.max_cte)) * throttle_reward)
+
         # if done:
-        #     # penalize the agent for getting off the road fast
-        #     norm_throttle = (self.last_throttle - MIN_THROTTLE) / (MAX_THROTTLE - MIN_THROTTLE)
-        #     return REWARD_CRASH - CRASH_REWARD_WEIGHT * norm_throttle
-        # # 1 per timesteps + throttle
+        #     return REWARD_CRASH + CRASH_REWARD_WEIGHT * self.throttle_average
         # throttle_reward = THROTTLE_REWARD_WEIGHT * (self.last_throttle / MAX_THROTTLE)
         # return 1 + ((1.0 - (math.fabs(self.cte) / self.max_cte)) * throttle_reward)
 
-        if done:
-            return REWARD_CRASH + CRASH_REWARD_WEIGHT * self.throttle_average
-        throttle_reward = THROTTLE_REWARD_WEIGHT * (self.last_throttle / MAX_THROTTLE)
-        return 1 + ((1.0 - (math.fabs(self.cte) / self.max_cte)) * throttle_reward)
+        # if done:
+        #     return REWARD_CRASH + CRASH_REWARD_WEIGHT * self.throttle_average
+        # throttle_reward = norm.pdf(self.last_throttle, loc=MAX_THROTTLE)
+        # return 1 + ((1.0 - (math.fabs(self.cte) / self.max_cte)) * throttle_reward)
 
         # # reward for speed on trained model
         # if done:
@@ -499,7 +505,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
     def determine_episode_over(self):
         # we have a few initial frames on start that are sometimes very large CTE when it's behind
         # the path just slightly. We ignore those.
-        # print(f'self.cte: {self.cte}, self.max_cte: {self.max_cte}')
+        #print(f'self.cte: {self.cte}, self.max_cte: {self.max_cte}')
         if math.fabs(self.cte) > 2 * self.max_cte:
             pass
         # elif self.check_adjusted_cte():
